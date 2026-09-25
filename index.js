@@ -1,11 +1,11 @@
-const { Client, GatewayIntentBits, Partials } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Events } = require('discord.js');
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
   ],
-  partials: [Partials.GuildMember],
+  partials: [Partials.GuildMember, Partials.User],
 });
 
 const GUILD_ID = '1505237937586180256';
@@ -15,21 +15,25 @@ client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
 });
 
-client.on('guildMemberUpdate', async (oldMember, newMember) => {
-  if (newMember.guild.id !== GUILD_ID) return;
+client.on(Events.Raw, async (packet) => {
+  if (packet.t !== 'GUILD_MEMBER_UPDATE') return;
+  const data = packet.d;
+  if (data.guild_id !== GUILD_ID) return;
 
-  const tagInfo = newMember.user.primaryGuild;
-  const hasTag = tagInfo?.identityEnabled && tagInfo?.identityGuildId === GUILD_ID;
-
-  const hasRole = newMember.roles.cache.has(ROLE_ID);
+  const tagInfo = data.user?.primary_guild;
+  const hasTag = tagInfo?.identity_enabled === true && tagInfo?.identity_guild_id === GUILD_ID;
 
   try {
+    const guild = await client.guilds.fetch(GUILD_ID);
+    const member = await guild.members.fetch(data.user.id);
+    const hasRole = member.roles.cache.has(ROLE_ID);
+
     if (hasTag && !hasRole) {
-      await newMember.roles.add(ROLE_ID);
-      console.log(`Added role to ${newMember.user.tag}`);
+      await member.roles.add(ROLE_ID);
+      console.log(`Added role to ${member.user.tag}`);
     } else if (!hasTag && hasRole) {
-      await newMember.roles.remove(ROLE_ID);
-      console.log(`Removed role from ${newMember.user.tag}`);
+      await member.roles.remove(ROLE_ID);
+      console.log(`Removed role from ${member.user.tag}`);
     }
   } catch (err) {
     console.error('Role update failed:', err);
